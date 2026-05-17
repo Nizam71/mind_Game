@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Natural Simon Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f7f2;
+            color: #4a4238;
+            overflow: hidden;
+            touch-action: manipulation;
+            margin: 0;
+            padding: 0;
+            /* Flex center for the main app container */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        #app-root {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            height: 100%;
+            max-width: 600px;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .simon-container {
+            /* Grid method for the board layout */
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: clamp(0.75rem, 4vw, 1.5rem);
+            
+            /* Sizing based on the smaller of width or height to stay perfectly square and visible */
+            width: min(85vw, 400px, 60vh);
+            aspect-ratio: 1 / 1;
+            
+            margin: auto;
+            transition: all 0.5s ease;
+        }
+
+        .pad {
+            width: 100%;
+            height: 100%;
+            border-radius: clamp(16px, 5vw, 32px);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 4px solid transparent;
+        }
+
+        /* Natural Colors */
+        .pad-0 { background-color: #8da08e; }
+        .pad-0.active { background-color: #b5c4b6; box-shadow: 0 0 50px #8da08e; transform: scale(0.96); border-color: rgba(255,255,255,0.4); }
+
+        .pad-1 { background-color: #c98a75; }
+        .pad-1.active { background-color: #e4b2a3; box-shadow: 0 0 50px #c98a75; transform: scale(0.96); border-color: rgba(255,255,255,0.4); }
+
+        .pad-2 { background-color: #7b8fa1; }
+        .pad-2.active { background-color: #a4b4c1; box-shadow: 0 0 50px #7b8fa1; transform: scale(0.96); border-color: rgba(255,255,255,0.4); }
+
+        .pad-3 { background-color: #d4a373; }
+        .pad-3.active { background-color: #e9c49a; box-shadow: 0 0 50px #d4a373; transform: scale(0.96); border-color: rgba(255,255,255,0.4); }
+
+        .btn-primary {
+            background-color: #4a4238;
+            color: #f8f7f2;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary:hover {
+            background-color: #63594b;
+            transform: translateY(-2px);
+        }
+
+        .overlay {
+            background: rgba(248, 247, 242, 0.98);
+            z-index: 50;
+            transition: opacity 0.4s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .vibrate {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #4a4238;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-root">
+        <!-- Flexbox Top Section -->
+        <header class="text-center">
+            <h1 class="text-3xl sm:text-4xl font-light tracking-tight mb-1">Simon Natural</h1>
+            <p class="text-[10px] opacity-60 uppercase tracking-[0.2em]">Mindfulness & Memory</p>
+        </header>
+
+        <!-- Stats Panel (Flex with Grid children) -->
+        <div class="flex items-center gap-6 sm:gap-12 bg-white/40 px-6 sm:px-10 py-4 rounded-full backdrop-blur-sm border border-white/50 my-4 shadow-sm">
+            <div class="text-center min-w-[60px]">
+                <p class="text-[10px] uppercase tracking-wider opacity-50 mb-1">Score</p>
+                <p id="current-score" class="text-2xl sm:text-3xl font-semibold">0</p>
+            </div>
+            <div class="h-10 w-[1px] bg-stone-200"></div>
+            <div class="text-center min-w-[60px]">
+                <p class="text-[10px] uppercase tracking-wider opacity-50 mb-1">Best <span id="sync-status"></span></p>
+                <p id="high-score" class="text-2xl sm:text-3xl font-semibold">0</p>
+            </div>
+        </div>
+
+        <!-- Game Board (Grid) -->
+        <main id="game-board" class="simon-container opacity-20 scale-95 pointer-events-none">
+            <div class="pad pad-0" onclick="handlePadClick(0)"></div>
+            <div class="pad pad-1" onclick="handlePadClick(1)"></div>
+            <div class="pad pad-2" onclick="handlePadClick(2)"></div>
+            <div class="pad pad-3" onclick="handlePadClick(3)"></div>
+        </main>
+
+        <!-- Status Message (Flex footer) -->
+        <footer class="mt-4 text-center">
+            <div class="h-8">
+                <p id="message" class="text-xs sm:text-sm font-medium tracking-wide opacity-80 uppercase"></p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Start / Over Overlay -->
+    <div id="game-overlay" class="overlay fixed inset-0">
+        <div id="intro-content">
+            <h2 class="text-4xl sm:text-5xl font-light mb-2 text-stone-800">Hard Mode</h2>
+            <p class="text-stone-500 mb-8 max-w-[280px] mx-auto text-sm sm:text-base">The sequence won't replay. Remember every step yourself.</p>
+        </div>
+        
+        <div id="game-over-content" class="hidden">
+            <h2 class="text-4xl sm:text-5xl font-light mb-2 text-stone-800">Game Over</h2>
+            <p id="final-score-msg" class="text-xl text-stone-600 mb-8"></p>
+        </div>
+
+        <button id="main-action-btn" onclick="startGame()" class="btn-primary px-12 sm:px-16 py-3 sm:py-4 rounded-full font-semibold text-base sm:text-lg">
+            Start Game
+        </button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'simon-natural-v3';
+
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+
+        if (firebaseConfigStr) {
+            try {
+                const firebaseConfig = JSON.parse(firebaseConfigStr);
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+                initAuth();
+
+                onAuthStateChanged(auth, (user) => {
+                    currentUser = user;
+                    if (user) setupHighscoreListener(user.uid);
+                });
+            } catch (e) {
+                console.error("Firebase setup failed:", e);
+            }
+        }
+
+        let highscore = 0;
+        const frequencies = [261.63, 329.63, 392.00, 523.25];
+        let audioCtx = null;
+
+        window.sequence = [];
+        window.playerSequence = [];
+        window.score = 0;
+        window.isPlaying = false;
+        window.isPlayerTurn = false;
+
+        function setupHighscoreListener(userId) {
+            if (!db) return;
+            const scoreDoc = doc(db, 'artifacts', appId, 'users', userId, 'stats', 'highscore');
+            onSnapshot(scoreDoc, (snapshot) => {
+                if (snapshot.exists()) {
+                    highscore = snapshot.data().value || 0;
+                    document.getElementById('high-score').innerText = highscore;
+                }
+            }, (err) => console.log("Sync error"));
+        }
+
+        async function saveHighscore(newScore) {
+            if (!currentUser || !db) return;
+            const scoreDoc = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'stats', 'highscore');
+            try {
+                document.getElementById('sync-status').innerHTML = '<span class="loader"></span>';
+                await setDoc(scoreDoc, { value: newScore }, { merge: true });
+                document.getElementById('sync-status').innerHTML = '';
+            } catch (err) {
+                document.getElementById('sync-status').innerHTML = '⚠️';
+            }
+        }
+
+        window.playTone = function(index) {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequencies[index], audioCtx.currentTime);
+            
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.02);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.5);
+        };
+
+        window.flashPad = function(index) {
+            const pad = document.querySelector(`.pad-${index}`);
+            if (!pad) return;
+            pad.classList.add('active');
+            window.playTone(index);
+            setTimeout(() => pad.classList.remove('active'), 400);
+        };
+
+        window.updateMessage = function(text) {
+            document.getElementById('message').innerText = text;
+        };
+
+        window.startGame = function() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            document.getElementById('game-overlay').classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                document.getElementById('game-overlay').classList.add('hidden');
+            }, 400);
+            
+            document.getElementById('game-board').classList.remove('opacity-20', 'scale-95', 'pointer-events-none');
+            
+            window.isPlaying = true;
+            window.sequence = [];
+            window.score = 0;
+            document.getElementById('current-score').innerText = 0;
+            
+            setTimeout(() => window.nextRound(), 600);
+        };
+
+        window.nextRound = async function() {
+            if (!window.isPlaying) return;
+            window.playerSequence = [];
+            
+            const nextStep = Math.floor(Math.random() * 4);
+            window.sequence.push(nextStep);
+            
+            window.isPlayerTurn = false;
+            window.updateMessage("New Step Added...");
+            
+            await new Promise(r => setTimeout(r, 800));
+            window.flashPad(nextStep);
+            await new Promise(r => setTimeout(r, 700));
+            
+            window.isPlayerTurn = true;
+            window.updateMessage("Repeat the FULL sequence!");
+        };
+
+        window.handlePadClick = function(index) {
+            if (!window.isPlayerTurn || !window.isPlaying) return;
+
+            window.flashPad(index);
+            window.playerSequence.push(index);
+            const curStep = window.playerSequence.length - 1;
+
+            if (window.playerSequence[curStep] !== window.sequence[curStep]) {
+                window.gameOver();
+                return;
+            }
+
+            if (window.playerSequence.length === window.sequence.length) {
+                window.score++;
+                document.getElementById('current-score').innerText = window.score;
+                if (window.score > highscore) {
+                    highscore = window.score;
+                    document.getElementById('high-score').innerText = highscore;
+                    saveHighscore(window.score);
+                }
+                
+                window.isPlayerTurn = false;
+                window.updateMessage("Correct!");
+                setTimeout(window.nextRound, 1000);
+            }
+        };
+
+        window.gameOver = function() {
+            window.isPlaying = false;
+            window.isPlayerTurn = false;
+            document.getElementById('game-board').classList.add('vibrate', 'opacity-20', 'scale-95', 'pointer-events-none');
+            window.updateMessage("Sequence Interrupted");
+            
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(110, audioCtx.currentTime);
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.0);
+            osc.connect(g);
+            g.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1.0);
+
+            setTimeout(() => {
+                document.getElementById('game-board').classList.remove('vibrate');
+                document.getElementById('intro-content').classList.add('hidden');
+                document.getElementById('game-over-content').classList.remove('hidden');
+                document.getElementById('final-score-msg').innerText = `You recalled ${window.score} steps.`;
+                document.getElementById('main-action-btn').innerText = "Try Again";
+                document.getElementById('game-overlay').classList.remove('hidden');
+                document.getElementById('game-overlay').classList.remove('opacity-0', 'pointer-events-none');
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
